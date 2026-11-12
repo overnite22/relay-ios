@@ -59,6 +59,7 @@ Les entrées Web s'ouvrent dans Safari.
 ## Développement
 
 Voir [docs/INSTALLATION.md](docs/INSTALLATION.md) : compilation par GitHub Actions et installation sans Mac.
+Correspondance avec les API du serveur : [docs/PARITE.md](docs/PARITE.md).
 
 ```bash
 node scripts/generate-project.mjs     # après ajout/suppression d'un fichier .swift
