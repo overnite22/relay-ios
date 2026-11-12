@@ -1,7 +1,7 @@
 # Relay pour iPhone
 
 Client iPhone natif (SwiftUI) d'un serveur **Relay**, gestionnaire de connexions auto-hébergé
-(SSH, RDP, VNC, coffre d'identifiants, synchronisation d'inventaire). Version **0.1.0**.
+(SSH, RDP, VNC, coffre d'identifiants, synchronisation d'inventaire). Version **0.2.0**.
 Cible iOS 26.0+, interface en français, aucune dépendance tierce.
 
 ## Fonctionnalités
@@ -18,6 +18,7 @@ Cible iOS 26.0+, interface en français, aucune dépendance tierce.
 - **Connexion rapide** SSH/RDP sans créer de fiche.
 - **Disponibilité** : entrées injoignables, accessibles ou sans mesure, retest à la demande.
 - **Coffre** : utilisateur, mot de passe, clé SSH et codes TOTP, derrière Face ID ; copie avec expiration.
+- **Enregistrements** : relecture des sessions enregistrées (lecture, pause, ±10 s, vitesse ×0,5 à ×8, pauses sautées), suppression.
 - **Journal d'activité** du serveur.
 
 Les consoles Proxmox et les entrées Web s'ouvrent depuis Relay web ou Safari.

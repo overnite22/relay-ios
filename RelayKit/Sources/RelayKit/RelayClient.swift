@@ -169,6 +169,23 @@ public actor RelayClient {
         try await get("/api/audit", query: [URLQueryItem(name: "limit", value: String(limit))])
     }
 
+    public func recordings() async throws -> [Recording] {
+        let list: [Recording] = try await get("/api/recordings")
+        return list.sorted { $0.at > $1.at }
+    }
+
+    /// Contenu brut d'un enregistrement (flux Guacamole, 64 Mio au plus).
+    public func recordingData(_ id: String) async throws -> Data {
+        var req = try request("GET", "/api/recordings/\(escape(id))")
+        req.timeoutInterval = 120
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        return try await send(req)
+    }
+
+    public func deleteRecording(_ id: String) async throws {
+        _ = try await send(request("DELETE", "/api/recordings/\(escape(id))"))
+    }
+
     /// Met à jour le favori d'une entrée (PUT complet, comme le fait Relay web).
     public func setFavorite(_ entry: Entry, _ favorite: Bool) async throws -> Entry {
         // Les réglages avancés ne sont pas modélisés côté mobile : on relit la fiche complète pour les conserver.

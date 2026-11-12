@@ -25,6 +25,12 @@ struct MoreView: View {
                     Label("Journal d'activité", systemImage: "clock.arrow.circlepath")
                 }
                 .accessibilityIdentifier("moreAudit")
+                NavigationLink {
+                    RecordingsView(app: app)
+                } label: {
+                    Label("Enregistrements", systemImage: "film")
+                }
+                .accessibilityIdentifier("moreRecordings")
             }
             Section {
                 Picker("Texte SSH", selection: $sshText) {

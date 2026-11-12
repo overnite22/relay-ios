@@ -19,6 +19,10 @@ final class RemoteScreenView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
     var mode: PointerMode = .touchpad {
         didSet { updateCursorLayer() }
     }
+    /// Faux en relecture : la position du pointeur n'est pas enregistrée.
+    var showsPointer = true {
+        didSet { updateCursorLayer() }
+    }
     /// Appelé quand le clavier logiciel apparaît ou disparaît.
     var onKeyboardChange: ((Bool) -> Void)?
 
@@ -134,7 +138,7 @@ final class RemoteScreenView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
     private func updateCursorLayer() {
         let s = scale
         let f = screenFrame
-        cursorLayer.isHidden = remoteSize == .zero
+        cursorLayer.isHidden = remoteSize == .zero || !showsPointer
         cursorLayer.anchorPoint = .zero
         cursorLayer.setAffineTransform(CGAffineTransform(scaleX: s, y: s))
         cursorLayer.position = CGPoint(x: f.minX + (pointer.x - cursorHotspot.x) * s, y: f.minY + (pointer.y - cursorHotspot.y) * s)

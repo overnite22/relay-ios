@@ -34,6 +34,11 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
         case ("GET", "/api/connection-status"): body = Self.status
         case ("GET", "/api/credentials"): body = Self.credentials
         case ("GET", "/api/audit"): body = Self.audit
+        case ("GET", "/api/recordings"): body = Self.recordings
+        case ("GET", "/api/recordings/r-demo"): body = GuacFixture.recording
+        case ("DELETE", let p) where p.hasPrefix("/api/recordings/"):
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (Data(), response)
         case ("POST", let p) where p.hasSuffix("/reveal"): body = #"{"value":"Exemple-Secret-42"}"#
         case ("GET", let p) where p.hasSuffix("/totp"): body = #"{"code":"492039","remaining":21,"period":30}"#
         case ("POST", let p) where p.hasSuffix("/test-connection"):
@@ -78,6 +83,11 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
      {"id":"c-mfa","name":"Console fournisseur","username":"ops@example.com","domain":"","notes":"","hasPassword":true,"hasPrivateKey":false,"hasPassphrase":false,"hasTotp":true}]
     """
 
+    static let recordings = """
+    [{"id":"r-demo","name":"pve-01","kind":"ssh","at":"2026-11-12T07:30:00Z","size":48213,"limited":false},
+     {"id":"r-old","name":"srv-ad-01","kind":"rdp","at":"2026-11-10T16:05:00Z","size":67108864,"limited":true}]
+    """
+
     static let audit = """
     [{"id":3,"at":"2026-11-12T07:58:00Z","user":"admin@example.com","action":"session.open","target":"pve-01","detail":"ssh"},
      {"id":2,"at":"2026-11-12T07:40:00Z","user":"admin@example.com","action":"device.create","target":"d1","detail":"iPhone"},
@@ -88,6 +98,20 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
 /// Session Guacamole scriptée : fond, cadres, texte simulé et image PNG (vérifie le rendu de bout en bout).
 enum GuacFixture {
     static let png = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAYAAADlNHIOAAAA0klEQVR4nO3XsQ0CQRAEwc+HGAmYKCADMDD69FMnndnSSGXt9Xi+3t/+r6f/r7/qAes9AADbPQAA2z0AANv9dfrAu/cA4h5A3AOIewBxDyDuAcQ9gLh3iMU9AADbPQAA2z0AANs9gBrg9IF37wHEPYC4BxD3AOIeQNwDiHsAce8Qi3sAALZ7AAC2ewAAtnsANcDpA+/eA4h7AHEPIO4BxD2AuAcQ9wDi3iEW9wAAbPcAAGz3AABs9wBqgNMH3r0HEPcA4h5A3AOIewBxDyDuAcT9B4SClJNl9ZprAAAAAElFTkSuQmCC"
+
+    /// Enregistrement : la trame de démonstration, un carré qui traverse l'écran, puis une longue pause.
+    static var recording: String {
+        func i(_ op: String, _ args: String...) -> String { GuacInstruction(op, args).encoded() }
+        var text = script.dropFirst().joined().replacingOccurrences(of: i("sync", "1"), with: i("sync", "1000"))
+        for step in 0..<30 {
+            let x = 40 + step * 35
+            text += i("rect", "0", String(x - 35), "1000", "60", "60") + i("cfill", "14", "0", "18", "20", "24", "255")
+            text += i("rect", "0", String(x), "1000", "60", "60") + i("cfill", "14", "0", "229", "112", "0", "255")
+            text += i("sync", String(1100 + step * 100))
+        }
+        text += i("rect", "0", "40", "1100", "400", "40") + i("cfill", "14", "0", "63", "185", "80", "255") + i("sync", "60000")
+        return text
+    }
 
     static var script: [String] {
         func i(_ op: String, _ args: String...) -> String { GuacInstruction(op, args).encoded() }

@@ -107,4 +107,26 @@ final class RelayUITests: XCTestCase {
         app.buttons["sessionClose"].tap()
         XCTAssertTrue(app.buttons["entryOpen"].waitForExistence(timeout: 5))
     }
+
+    func testRecordingPlayback() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Plus"].tap()
+        app.buttons["moreRecordings"].tap()
+        XCTAssertTrue(app.buttons["recording-pve-01"].waitForExistence(timeout: 5))
+        shot(app, "11-enregistrements")
+        app.buttons["recording-pve-01"].tap()
+        let toggle = app.buttons["playerToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        // Pauses sautées : la fin (60 s) est atteinte en quelques secondes.
+        let ended = NSPredicate(format: "label == %@", "Lecture")
+        expectation(for: ended, evaluatedWith: toggle)
+        waitForExpectations(timeout: 20)
+        XCTAssertEqual(app.staticTexts["playerPosition"].label, "0:59")
+        shot(app, "12-lecture")
+        toggle.tap()
+        XCTAssertTrue(app.buttons["playerClose"].waitForExistence(timeout: 5))
+        app.buttons["playerClose"].tap()
+        XCTAssertTrue(app.buttons["recording-pve-01"].waitForExistence(timeout: 5))
+    }
 }
