@@ -9,6 +9,7 @@ struct EntryDetailView: View {
     @State private var testing = false
     @State private var lastTest: ConnectionTest?
     @State private var testError: String?
+    @State private var editing = false
 
     var body: some View {
         if let entry = app.tree.entry(entryId) {
@@ -86,10 +87,17 @@ struct EntryDetailView: View {
                     Text(markdown(entry.notes)).textSelection(.enabled).font(.callout)
                 }
             }
+            AttachmentsSection(app: app, entryId: entry.id)
         }
         .navigationTitle(entry.name)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $editing) {
+            EntryEditorView(app: app, entryId: entry.id, input: EntryInput(folderId: entry.folderId, name: entry.name, kind: entry.kind))
+        }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Modifier", systemImage: "pencil") { editing = true }.accessibilityIdentifier("entryEdit")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(entry.favorite ? "Retirer des favoris" : "Ajouter aux favoris",
                        systemImage: entry.favorite ? "star.fill" : "star") {

@@ -20,6 +20,9 @@ final class GuacEngine: @unchecked Sendable {
     var onState: (@MainActor (GuacState, String?) -> Void)?
     var onClipboard: (@MainActor (String) -> Void)?
     var onName: (@MainActor (String) -> Void)?
+    var onFilesystem: (@MainActor (Int, String) -> Void)?
+    var onFileReceived: (@MainActor (GuacClientCore.ReceivedFile) -> Void)?
+    var onFileProgress: (@MainActor (String, Int) -> Void)?
 
     private let queue = DispatchQueue(label: "relay.guac.engine", qos: .userInteractive)
     private let core = GuacClientCore()
@@ -41,6 +44,18 @@ final class GuacEngine: @unchecked Sendable {
             core.onClipboard = { [weak self] text in
                 let callback = self?.onClipboard
                 Task { @MainActor in callback?(text) }
+            }
+            core.onFilesystem = { [weak self] index, name in
+                let callback = self?.onFilesystem
+                Task { @MainActor in callback?(index, name) }
+            }
+            core.onFileReceived = { [weak self] file in
+                let callback = self?.onFileReceived
+                Task { @MainActor in callback?(file) }
+            }
+            core.onFileProgress = { [weak self] name, bytes in
+                let callback = self?.onFileProgress
+                Task { @MainActor in callback?(name, bytes) }
             }
             core.onName = { [weak self] name in
                 let callback = self?.onName
@@ -86,6 +101,30 @@ final class GuacEngine: @unchecked Sendable {
     func type(_ text: String) { queue.async { self.core.type(text) } }
     func clipboard(_ text: String) { queue.async { self.core.sendClipboard(text) } }
     func resize(width: Int, height: Int) { queue.async { self.core.sendSize(width: width, height: height) } }
+
+    // MARK: - Fichiers
+
+    func requestObject(_ object: Int, name: String, progress: (@MainActor (Int) -> Void)? = nil,
+                       completion: @escaping @MainActor (GuacClientCore.ObjectResult) -> Void) {
+        queue.async {
+            self.core.requestObject(object, name: name, progress: { bytes in
+                Task { @MainActor in progress?(bytes) }
+            }, completion: { result in
+                Task { @MainActor in completion(result) }
+            })
+        }
+    }
+
+    func putObject(_ object: Int, name: String, mimetype: String, data: Data, progress: (@MainActor (Int) -> Void)? = nil,
+                   completion: @escaping @MainActor (Result<Void, GuacError>) -> Void) {
+        queue.async {
+            self.core.putObject(object, name: name, mimetype: mimetype, data: data, progress: { bytes in
+                Task { @MainActor in progress?(bytes) }
+            }, completion: { result in
+                Task { @MainActor in completion(result) }
+            })
+        }
+    }
 
     /// Combinaison : modificateurs enfoncés, touche, puis relâchement inverse.
     func chord(_ modifiers: [Int], _ keysym: Int) {

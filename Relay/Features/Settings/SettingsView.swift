@@ -38,6 +38,16 @@ struct MoreView: View {
                 }
                 .accessibilityIdentifier("moreWorkspaces")
             }
+            Section("Administration") {
+                NavigationLink { SourcesView(app: app) } label: { Label("Sources de synchro", systemImage: "arrow.triangle.2.circlepath") }
+                    .accessibilityIdentifier("moreSources")
+                NavigationLink { DuplicatesView(app: app) } label: { Label("Doublons", systemImage: "square.on.square.dashed") }
+                    .accessibilityIdentifier("moreDuplicates")
+                NavigationLink { ImportRDMView(app: app) } label: { Label("Importer depuis RDM", systemImage: "square.and.arrow.down") }
+                    .accessibilityIdentifier("moreImport")
+                NavigationLink { BackupView(app: app) } label: { Label("Sauvegarde", systemImage: "externaldrive.badge.timemachine") }
+                    .accessibilityIdentifier("moreBackup")
+            }
             Section {
                 Picker("Texte SSH", selection: $sshText) {
                     Text("Petit").tag(0.7)

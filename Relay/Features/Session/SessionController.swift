@@ -79,6 +79,11 @@ enum SessionPreferences {
     private(set) var remoteName: String?
     private(set) var keyboardVisible = false
     private(set) var toast: String?
+    /// Système de fichiers de la session (SFTP en SSH, lecteur « Relay » en RDP).
+    private(set) var filesystem: (object: Int, name: String)?
+    /// Fichier reçu du serveur, à proposer au partage (RDP : dossier Download).
+    var sharedFile: SharedFile?
+    private(set) var incoming: (name: String, bytes: Int)?
     var mode: PointerMode {
         didSet { screen.mode = mode }
     }
@@ -148,6 +153,17 @@ enum SessionPreferences {
                 self?.flash("Presse-papiers distant copié")
             }
             engine.onState = { [weak self] state, error in self?.update(state, error: error) }
+            engine.onFilesystem = { [weak self] index, name in self?.filesystem = (index, name) }
+            engine.onFileProgress = { [weak self] name, bytes in self?.incoming = (name, bytes) }
+            engine.onFileReceived = { [weak self] file in
+                guard let self else { return }
+                self.incoming = nil
+                do {
+                    self.sharedFile = SharedFile(url: try LocalFiles.save(file.data, name: file.name))
+                } catch {
+                    self.flash("Fichier reçu mais non enregistré : \(error.localizedDescription)")
+                }
+            }
             screen.engine = engine
             self.engine = engine
             engine.start()
@@ -204,6 +220,41 @@ enum SessionPreferences {
 
     func toggleKeyboard() { screen.toggleKeyboard() }
 
+    // MARK: - Fichiers
+
+    func list(_ path: String) async throws -> [RemoteItem] {
+        guard let engine, let fs = filesystem else { throw FileError.unavailable }
+        let result: GuacClientCore.ObjectResult = await withCheckedContinuation { continuation in
+            engine.requestObject(fs.object, name: path) { continuation.resume(returning: $0) }
+        }
+        switch result {
+        case .success(let value):
+            guard value.mimetype == GuacClientCore.directoryMimetype else { throw FileError.notDirectory }
+            return try RemoteItem.parseIndex(value.data)
+        case .failure(let error):
+            throw FileError.remote(error.description)
+        }
+    }
+
+    func download(_ path: String, progress: @escaping @MainActor (Int) -> Void) async throws -> URL {
+        guard let engine, let fs = filesystem else { throw FileError.unavailable }
+        let result: GuacClientCore.ObjectResult = await withCheckedContinuation { continuation in
+            engine.requestObject(fs.object, name: path, progress: progress) { continuation.resume(returning: $0) }
+        }
+        switch result {
+        case .success(let value): return try LocalFiles.save(value.data, name: RemotePath.basename(path))
+        case .failure(let error): throw FileError.remote(error.description)
+        }
+    }
+
+    func upload(_ data: Data, to path: String, mimetype: String, progress: @escaping @MainActor (Int) -> Void) async throws {
+        guard let engine, let fs = filesystem else { throw FileError.unavailable }
+        let result: Result<Void, GuacError> = await withCheckedContinuation { continuation in
+            engine.putObject(fs.object, name: path, mimetype: mimetype, data: data, progress: progress) { continuation.resume(returning: $0) }
+        }
+        if case .failure(let error) = result { throw FileError.remote(error.description) }
+    }
+
     func sendCtrlAltDel() { engine?.chord([Keysym.controlLeft, Keysym.altLeft], Keysym.delete) }
 
     func sendKey(_ modifiers: [Int], _ keysym: Int) { engine?.chord(modifiers, keysym) }
@@ -230,7 +281,7 @@ enum SessionPreferences {
 
     func resetZoom() { screen.resetZoom() }
 
-    private func flash(_ message: String) {
+    func flash(_ message: String) {
         toast = message
         toastTask?.cancel()
         toastTask = Task { [weak self] in

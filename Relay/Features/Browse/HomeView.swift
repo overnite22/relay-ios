@@ -9,7 +9,7 @@ struct HomeView: View {
     @State private var availabilityPath = NavigationPath()
     @State private var vaultPath = NavigationPath()
 
-    enum Tab: Hashable { case connections, availability, vault, more }
+    enum Tab: Hashable { case connections, availability, commands, vault, more }
 
     var body: some View {
         TabView(selection: $tab) {
@@ -26,6 +26,12 @@ struct HomeView: View {
             .badge(downCount)
             .tag(Tab.availability)
 
+            NavigationStack {
+                CommandsView(app: app).withRoutes(app)
+            }
+            .tabItem { Label("Commandes", systemImage: "terminal") }
+            .tag(Tab.commands)
+
             NavigationStack(path: $vaultPath) {
                 VaultView(app: app).withRoutes(app)
             }
@@ -39,6 +45,10 @@ struct HomeView: View {
             .tag(Tab.more)
         }
         .task { await app.refresh() }
+        .onChange(of: app.requestedTab) { _, requested in
+            if requested == "commands" { tab = .commands }
+            app.requestedTab = nil
+        }
         .overlay(alignment: .bottom) {
             if !app.sessions.isEmpty && app.presentedSessionID == nil { sessionsPill }
         }

@@ -15,7 +15,11 @@ import RelayKit
         UserDefaults.standard.set(false, forKey: Biometrics.settingKey)
         let account = ServerAccount(server: URL(string: "https://relay.example.com")!, token: "rlt_" + String(repeating: "x", count: 43))
         let app = AppSession(store: MemoryAccountStore(account), transport: FixtureHTTP())
-        app.tunnelOverride = { _ in ScriptedTransport(script: GuacFixture.script) }
+        app.tunnelOverride = { _ in
+            let transport = ScriptedTransport(script: GuacFixture.script)
+            transport.respond = GuacFixture.fileServer
+            return transport
+        }
         return app
     }
 }
@@ -41,6 +45,27 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
         case ("DELETE", "/api/workspaces/w-matin"):
             let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
             return (Data(), response)
+        case ("GET", let p) where p.hasPrefix("/api/entries/") && p.hasSuffix("/attachments"):
+            body = #"[{"id":"a1","name":"schema-reseau.pdf","size":48213,"createdAt":"2026-11-10T09:00:00Z"}]"#
+        case ("GET", let p) where p.hasPrefix("/api/entries/"):
+            body = #"{"id":"e-pve1","folderId":"f-pve","name":"pve-01","kind":"ssh","host":"pve-01.lab.example","port":22,"url":"","username":"root","credentialId":"c-key","settings":{"sftp":true},"notes":"Nœud principal.","favorite":true,"sourceId":"s1","externalId":"","createdAt":"","updatedAt":""}"#
+        case ("POST", "/api/entries"), ("PUT", _) where path.hasPrefix("/api/entries/"):
+            body = #"{"id":"e-new","folderId":null,"name":"nouveau","kind":"ssh","host":"192.0.2.50","port":22,"url":"","username":"","credentialId":null,"notes":"","favorite":false,"sourceId":null,"updatedAt":""}"#
+        case ("POST", "/api/folders"), ("PUT", _) where path.hasPrefix("/api/folders/") && !path.hasSuffix("/credentials"):
+            body = #"{"id":"f-new","parentId":null,"name":"Nouveau","credentials":{}}"#
+        case ("POST", "/api/credentials"), ("PUT", _) where path.hasPrefix("/api/credentials/"):
+            body = #"{"id":"c-new","name":"Nouveau","username":"ops","domain":"","notes":"","hasPassword":true,"hasPrivateKey":false,"hasPassphrase":false,"hasTotp":false}"#
+        case ("GET", "/api/sources"):
+            body = #"[{"id":"s1","kind":"proxmox","name":"Cluster labo","url":"https://pve.lab.example:8006","tokenId":"relay@pve!relay","hasSecret":true,"verifyTls":false,"folderId":"f-lab","options":{"guestEntries":true,"nodeEntries":true},"intervalMin":15,"lastSyncAt":"2026-11-12T07:45:00Z","lastStatus":"12 entrées à jour"},{"id":"s2","kind":"netbox","name":"NetBox","url":"https://netbox.example.com","tokenId":"","hasSecret":true,"verifyTls":true,"folderId":null,"options":{},"intervalMin":0,"lastSyncAt":null,"lastStatus":""}]"#
+        case ("POST", "/api/sources/s1/sync"), ("POST", "/api/sources/s1/test"):
+            body = #"{"ok":true,"message":"Connexion réussie : Proxmox VE 9.2"}"#
+        case ("GET", "/api/duplicates"):
+            body = #"[{"key":"ssh|192.0.2.12|22","label":"192.0.2.12:22","entries":[{"id":"e-pve2","folderId":"f-pve","name":"pve-02","kind":"ssh","host":"192.0.2.12","port":22,"url":"","username":"root","credentialId":null,"notes":"","favorite":false,"sourceId":"s1","updatedAt":""},{"id":"e-old","folderId":null,"name":"ancien-pve-02","kind":"ssh","host":"pve-02.lab.example","port":22,"url":"","username":"","credentialId":null,"notes":"","favorite":false,"sourceId":null,"updatedAt":""}]}]"#
+        case ("POST", "/api/commands/run"): body = Self.commandRun(finished: false)
+        case ("GET", "/api/commands/runs/r-demo"): body = Self.commandRun(finished: true)
+        case ("GET", "/api/commands/runs"): body = "[" + Self.commandRun(finished: true) + "]"
+        case ("GET", "/api/commands/saved"): body = #"[{"id":"s1","name":"Espace disque","command":"df -h /","sudo":false}]"#
+        case ("POST", "/api/commands/saved"): body = #"{"id":"s2","name":"Nouvelle","command":"uptime","sudo":false}"#
         case ("GET", "/api/recordings"): body = Self.recordings
         case ("GET", "/api/recordings/r-demo"): body = GuacFixture.recording
         case ("DELETE", let p) where p.hasPrefix("/api/recordings/"):
@@ -90,6 +115,18 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
      {"id":"c-mfa","name":"Console fournisseur","username":"ops@example.com","domain":"","notes":"","hasPassword":true,"hasPrivateKey":false,"hasPassphrase":false,"hasTotp":true}]
     """
 
+    static func commandRun(finished: Bool) -> String {
+        let s1 = finished ? "ok" : "running", s2 = finished ? "error" : "pending"
+        let out = finished ? #" 12:00:01 up 12 days,  3:04,  1 user,  load average: 0.08, 0.05, 0.01\n"# : ""
+        let err = finished ? "délai dépassé" : ""
+        return """
+        {"id":"r-demo","at":"2026-11-12T12:00:00Z","finishedAt":\(finished ? #""2026-11-12T12:00:03Z""# : "null"),"user":"admin@example.com",
+         "command":"uptime","sudo":false,"targets":2,"ok":\(finished ? 1 : 0),"failed":\(finished ? 1 : 0),"results":[
+          {"entryId":"e-pve1","name":"pve-01","address":"pve-01.lab.example:22","status":"\(s1)","exitCode":\(finished ? "0" : "null"),"output":"\(out)","truncated":false,"error":"","durationMs":412,"fingerprint":"SHA256:exemple","newHostKey":false},
+          {"entryId":"e-pve2","name":"pve-02","address":"192.0.2.12:22","status":"\(s2)","exitCode":null,"output":"","truncated":false,"error":"\(err)","durationMs":30000,"fingerprint":"","newHostKey":false}]}
+        """
+    }
+
     static let recordings = """
     [{"id":"r-demo","name":"pve-01","kind":"ssh","at":"2026-11-12T07:30:00Z","size":48213,"limited":false},
      {"id":"r-old","name":"srv-ad-01","kind":"rdp","at":"2026-11-10T16:05:00Z","size":67108864,"limited":true}]
@@ -120,6 +157,38 @@ enum GuacFixture {
         return text
     }
 
+    /// Faux système de fichiers : répond aux get (dossiers, fichiers) et accuse les envois.
+    static func fileServer(_ text: String) -> [String] {
+        func i(_ op: String, _ args: String...) -> String { GuacInstruction(op, args).encoded() }
+        var parser = GuacParser()
+        guard let instructions = try? parser.feed(text) else { return [] }
+        let dir = GuacClientCore.directoryMimetype
+        let folders: [String: String] = [
+            "/": #"{"/Documents":"\#(dir)","/rapport.txt":"text/plain"}"#,
+            "/Documents": #"{"/Documents/notes.md":"text/markdown"}"#,
+        ]
+        var replies: [String] = []
+        for instruction in instructions {
+            switch instruction.opcode {
+            case "get":
+                let name = instruction.string(1)
+                if let listing = folders[name] {
+                    replies.append(i("body", "0", "30", dir, name) + i("blob", "30", Data(listing.utf8).base64EncodedString()) + i("end", "30"))
+                } else {
+                    let content = Data("Contenu de démonstration de \(name)\n".utf8).base64EncodedString()
+                    replies.append(i("body", "0", "31", "text/plain", name) + i("blob", "31", content) + i("end", "31"))
+                }
+            case "put":
+                replies.append(i("ack", instruction.string(1), "OK", "0"))
+            case "blob":
+                replies.append(i("ack", instruction.string(0), "OK", "0"))
+            default:
+                break
+            }
+        }
+        return replies
+    }
+
     static var script: [String] {
         func i(_ op: String, _ args: String...) -> String { GuacInstruction(op, args).encoded() }
         var out: [String] = [i("", "fixture-tunnel")]
@@ -140,6 +209,7 @@ enum GuacFixture {
         frame += i("size", "-1", "16", "16") + i("rect", "-1", "0", "0", "16", "16") + i("cfill", "14", "-1", "255", "255", "255", "255")
         frame += i("cursor", "0", "0", "-1", "0", "0", "16", "16")
         frame += i("name", "pve-01 (démo)")
+        frame += i("filesystem", "0", "Relay")
         frame += i("sync", "1")
         out.append(frame)
         return out

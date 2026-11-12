@@ -35,9 +35,22 @@ struct EntryRow: View {
 struct EntryActions: ViewModifier {
     let entry: Entry
     let app: AppSession
+    @State private var editing: EditingBox<String>?
+    @State private var confirmDelete = false
 
     func body(content: Content) -> some View {
         content
+            .sheet(item: $editing) { box in
+                EntryEditorView(app: app, entryId: box.value, input: EntryInput(folderId: entry.folderId, name: entry.name, kind: entry.kind))
+            }
+            .confirmationDialog("Supprimer « \(entry.name) » ?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Supprimer", role: .destructive) {
+                    Task {
+                        try? await app.client?.deleteEntry(entry.id)
+                        await app.refresh()
+                    }
+                }
+            }
             .swipeActions(edge: .leading) {
                 if entry.kind.opensNatively {
                     Button("Ouvrir", systemImage: "play.fill") { app.open(.entry(entry, record: false)) }.tint(.relayAccent)
@@ -60,6 +73,10 @@ struct EntryActions: ViewModifier {
                 Button(entry.favorite ? "Retirer des favoris" : "Ajouter aux favoris", systemImage: "star") {
                     Task { await app.toggleFavorite(entry) }
                 }
+                Divider()
+                Button("Modifier", systemImage: "pencil") { editing = EditingBox(value: entry.id) }
+                Button("Dupliquer", systemImage: "plus.square.on.square") { Task { await app.duplicate(entry) } }
+                Button("Supprimer", systemImage: "trash", role: .destructive) { confirmDelete = true }
             }
     }
 }

@@ -26,6 +26,7 @@ struct SessionView: View {
     @Bindable var controller: SessionController
     let app: AppSession
     @State private var showHelp = false
+    @State private var showFiles = false
 
     var body: some View {
         NavigationStack {
@@ -43,6 +44,8 @@ struct SessionView: View {
             .toolbarBackground(.visible, for: .navigationBar, .bottomBar)
             .toolbar { toolbar }
             .sheet(isPresented: $showHelp) { GestureHelpView() }
+            .sheet(isPresented: $showFiles) { FileBrowserView(controller: controller) }
+            .sheet(item: $controller.sharedFile) { file in ShareSheet(url: file.url).presentationDetents([.medium, .large]) }
         }
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
@@ -79,6 +82,16 @@ struct SessionView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             .accessibilityIdentifier("sessionEnded")
         case .connected:
+            if let incoming = controller.incoming {
+                VStack {
+                    Label("Réception de \(incoming.name) : \(ByteCountFormatter.string(fromByteCount: Int64(incoming.bytes), countStyle: .file))",
+                          systemImage: "arrow.down.circle")
+                        .font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule()).padding(.top, 12)
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
             if let toast = controller.toast {
                 VStack {
                     Spacer()
@@ -135,6 +148,11 @@ struct SessionView: View {
             }
             .accessibilityIdentifier("sessionPointer")
             Spacer()
+            if controller.filesystem != nil {
+                Button("Fichiers", systemImage: "folder") { showFiles = true }
+                    .accessibilityIdentifier("sessionFiles")
+                Spacer()
+            }
             Menu {
                 Button("Envoyer le presse-papiers", systemImage: "doc.on.clipboard") { controller.sendClipboard() }
                 Button("Taper le presse-papiers", systemImage: "keyboard.badge.ellipsis") { controller.typeClipboard() }

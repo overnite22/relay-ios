@@ -41,6 +41,12 @@ public final class GuacClientCore {
     public var onName: ((String) -> Void)?
     public var onClipboard: ((String) -> Void)?
     public var onError: ((GuacError) -> Void)?
+    /// Système de fichiers proposé par guacd (SFTP en SSH, lecteur en RDP) : index d'objet et nom.
+    public var onFilesystem: ((Int, String) -> Void)?
+    /// Fichier poussé par le serveur (RDP : copie dans le dossier Download du lecteur).
+    public var onFileReceived: ((ReceivedFile) -> Void)?
+    /// Progression d'un fichier poussé par le serveur (nom, octets reçus).
+    public var onFileProgress: ((String, Int) -> Void)?
     /// Texte à écrire sur le tunnel.
     public var onSend: ((String) -> Void)?
 
@@ -52,8 +58,44 @@ public final class GuacClientCore {
     private enum Stream {
         case image(layer: Int, mask: Int, x: Int, y: Int, mime: String, data: Data)
         case clipboard(mime: String, data: Data)
+        case object(request: Int, mime: String, data: Data)
+        case file(name: String, mime: String, data: Data)
         case ignored
     }
+
+    public struct ReceivedFile: Equatable, Sendable {
+        public let name: String
+        public let mimetype: String
+        public let data: Data
+    }
+
+    /// Réponse à une lecture d'objet : type MIME et contenu.
+    public typealias ObjectResult = Result<(mimetype: String, data: Data), GuacError>
+
+    private struct PendingGet {
+        let id: Int
+        let object: Int
+        let name: String
+        let progress: ((Int) -> Void)?
+        let completion: (ObjectResult) -> Void
+    }
+
+    private struct PendingPut {
+        let data: Data
+        var offset: Int
+        var ended: Bool
+        let progress: ((Int) -> Void)?
+        let completion: (Result<Void, GuacError>) -> Void
+    }
+
+    private var gets: [PendingGet] = []
+    private var getsByStream: [Int: PendingGet] = [:]
+    private var puts: [Int: PendingPut] = [:]
+    private var nextRequest = 0
+    /// Taille des blocs envoyés (comme guacamole-common-js).
+    public static let blobSize = 6048
+    /// Type MIME d'un index de dossier.
+    public static let directoryMimetype = "application/vnd.glyptodon.guacamole.stream-index+json"
 
     public init() {}
 
@@ -127,6 +169,73 @@ public final class GuacClientCore {
         send(GuacInstruction("end", String(index)))
     }
 
+    // MARK: - Fichiers (objets Guacamole)
+
+    /// Demande le contenu d'un chemin de l'objet (dossier : index JSON ; fichier : octets).
+    public func requestObject(_ object: Int, name: String, progress: ((Int) -> Void)? = nil,
+                              completion: @escaping (ObjectResult) -> Void) {
+        guard state == .connected else {
+            completion(.failure(GuacError(message: "Session non connectée", status: 0x0300)))
+            return
+        }
+        nextRequest += 1
+        gets.append(PendingGet(id: nextRequest, object: object, name: name, progress: progress, completion: completion))
+        send(GuacInstruction("get", String(object), name))
+    }
+
+    /// Envoie un fichier vers `name` dans l'objet ; chaque bloc attend l'accusé du serveur.
+    public func putObject(_ object: Int, name: String, mimetype: String, data: Data, progress: ((Int) -> Void)? = nil,
+                          completion: @escaping (Result<Void, GuacError>) -> Void) {
+        guard state == .connected else {
+            completion(.failure(GuacError(message: "Session non connectée", status: 0x0300)))
+            return
+        }
+        let index = nextOutputStream
+        nextOutputStream += 1
+        puts[index] = PendingPut(data: data, offset: 0, ended: false, progress: progress, completion: completion)
+        send(GuacInstruction("put", String(object), String(index), mimetype, name))
+    }
+
+    /// Abandonne les transferts en cours (session fermée).
+    private func failTransfers(_ error: GuacError) {
+        let pendingGets = gets + Array(getsByStream.values)
+        let pendingPuts = Array(puts.values)
+        gets.removeAll()
+        getsByStream.removeAll()
+        puts.removeAll()
+        for g in pendingGets { g.completion(.failure(error)) }
+        for p in pendingPuts { p.completion(.failure(error)) }
+    }
+
+    private func handleAck(stream: Int, message: String, status: Int) {
+        guard var put = puts[stream] else { return }
+        if status != 0 {
+            puts.removeValue(forKey: stream)
+            put.completion(.failure(GuacError(message: message.isEmpty ? "Envoi refusé" : message, status: status)))
+            return
+        }
+        if put.ended {
+            puts.removeValue(forKey: stream)
+            put.completion(.success(()))
+            return
+        }
+        if put.offset >= put.data.count {
+            put.ended = true
+            puts[stream] = put
+            send(GuacInstruction("end", String(stream)))
+            // guacd n'accuse pas toujours la fin : le transfert est terminé côté client.
+            puts.removeValue(forKey: stream)
+            put.completion(.success(()))
+            return
+        }
+        let end = min(put.offset + Self.blobSize, put.data.count)
+        let chunk = put.data.subdata(in: put.offset..<end)
+        put.offset = end
+        puts[stream] = put
+        send(GuacInstruction("blob", String(stream), chunk.base64EncodedString()))
+        put.progress?(end)
+    }
+
     /// Instruction de maintien du tunnel (toutes les 5 s, comme le client web).
     public func ping() {
         send(GuacInstruction("", "ping", String(Int(Date().timeIntervalSince1970 * 1000))))
@@ -151,9 +260,24 @@ public final class GuacClientCore {
             lastSync = i.int(0)
             if state == .waiting || state == .connecting { set(.connected) }
             onDisplay?(.sync(timestamp: lastSync))
-        case "nop", "ready", "required", "argv", "msg", "set", "filesystem":
+        case "nop", "ready", "required", "argv", "msg", "set":
             if i.opcode == "argv" { ack(i.int(0), "Unsupported", 0x0100) }
             if i.opcode == "set" { return }
+        case "filesystem":
+            onFilesystem?(i.int(0), i.string(1))
+        case "body":
+            // body,<objet>,<flux>,<type>,<nom> : réponse à un get.
+            let object = i.int(0), stream = i.int(1), mime = i.string(2), name = i.string(3)
+            guard let index = gets.firstIndex(where: { $0.object == object && $0.name == name }) else {
+                ack(stream, "Unexpected", 0x0100)
+                return
+            }
+            let request = gets.remove(at: index)
+            getsByStream[stream] = request
+            streams[stream] = .object(request: request.id, mime: mime, data: Data())
+            ack(stream, "OK", 0)
+        case "ack":
+            handleAck(stream: i.int(0), message: i.string(1), status: i.int(2))
         case "error":
             fail(GuacError(message: i.string(0), status: i.int(1)))
         case "disconnect":
@@ -179,6 +303,14 @@ public final class GuacClientCore {
             case .clipboard(let mime, var data):
                 data.append(chunk)
                 streams[index] = .clipboard(mime: mime, data: data)
+            case .object(let request, let mime, var data):
+                data.append(chunk)
+                streams[index] = .object(request: request, mime: mime, data: data)
+                getsByStream[index]?.progress?(data.count)
+            case .file(let name, let mime, var data):
+                data.append(chunk)
+                streams[index] = .file(name: name, mime: mime, data: data)
+                onFileProgress?(name, data.count)
             case .ignored:
                 break
             }
@@ -191,12 +323,20 @@ public final class GuacClientCore {
                 onDisplay?(.image(layer: layer, mask: mask, x: x, y: y, mime: mime, data: data))
             case .clipboard(let mime, let data):
                 if mime.hasPrefix("text/"), let text = String(data: data, encoding: .utf8) { onClipboard?(text) }
+            case .object(_, let mime, let data):
+                getsByStream.removeValue(forKey: index)?.completion(.success((mimetype: mime, data: data)))
+            case .file(let name, let mime, let data):
+                onFileReceived?(ReceivedFile(name: name, mimetype: mime, data: data))
             case .ignored:
                 break
             }
         case "clipboard":
             streams[i.int(0)] = .clipboard(mime: i.string(1), data: Data())
-        case "audio", "video", "file", "pipe":
+        case "file":
+            // file,<flux>,<type>,<nom> : téléchargement poussé par le serveur.
+            streams[i.int(0)] = .file(name: i.string(2), mime: i.string(1), data: Data())
+            ack(i.int(0), "OK", 0)
+        case "audio", "video", "pipe":
             streams[i.int(0)] = .ignored
             ack(i.int(0), "Unsupported", 0x0100)
         case "copy":
@@ -259,6 +399,7 @@ public final class GuacClientCore {
     private func set(_ s: GuacState) {
         guard s != state else { return }
         state = s
+        if s == .disconnected { failTransfers(GuacError(message: "Session fermée", status: 0x0209)) }
         onState?(s)
     }
 

@@ -13,7 +13,7 @@ final class ClientCoreTests: XCTestCase {
         return (core, box)
     }
 
-    final class Box {
+    final class Box: @unchecked Sendable {
         var sent: [String] = []
         var display: [DisplayCommand] = []
         var states: [GuacState] = []
@@ -89,7 +89,8 @@ final class ClientCoreTests: XCTestCase {
         let (core, box) = make()
         core.connecting()
         core.receive("0.,1.t;4.sync,1.0;5.audio,1.2,9.audio/l16;4.file,1.4,10.text/plain,5.a.txt;")
-        XCTAssertEqual(box.sent.filter { $0.contains("Unsupported") }.count, 2)
+        XCTAssertEqual(box.sent.filter { $0.contains("Unsupported") }.count, 1)
+        XCTAssertTrue(box.sent.contains("3.ack,1.4,2.OK,1.0;"), "les fichiers poussés sont acceptés")
     }
 
     func testDrawingInstructions() {

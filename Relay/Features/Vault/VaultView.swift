@@ -5,6 +5,7 @@ import SwiftUI
 struct VaultView: View {
     let app: AppSession
     @State private var query = ""
+    @State private var creating = false
 
     var body: some View {
         List {
@@ -35,6 +36,10 @@ struct VaultView: View {
             }
         }
         .navigationTitle("Coffre")
+        .toolbar {
+            Button("Nouvel identifiant", systemImage: "plus") { creating = true }.accessibilityIdentifier("credNew")
+        }
+        .sheet(isPresented: $creating) { CredentialEditorView(app: app, credential: nil) }
         .searchable(text: $query, prompt: "Nom ou utilisateur")
         .refreshable { await app.loadCredentials() }
         .task { await app.loadCredentials() }
@@ -55,6 +60,7 @@ struct CredentialDetailView: View {
     @State private var totp: TOTPCode?
     @State private var totpFetched = Date()
     @State private var error: String?
+    @State private var editing = false
 
     var body: some View {
         if let credential = app.credential(credentialId) {
@@ -118,6 +124,8 @@ struct CredentialDetailView: View {
         }
         .navigationTitle(c.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { Button("Modifier", systemImage: "pencil") { editing = true }.accessibilityIdentifier("credEdit") }
+        .sheet(isPresented: $editing) { CredentialEditorView(app: app, credential: c) }
         .onDisappear { revealed = nil }
     }
 

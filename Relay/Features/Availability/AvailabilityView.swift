@@ -5,6 +5,8 @@ import SwiftUI
 struct AvailabilityView: View {
     let app: AppSession
     @State private var filter: Filter = .down
+    @State private var folderFilter: String?
+    @State private var retest: (done: Int, total: Int)?
 
     enum Filter: String, CaseIterable, Identifiable {
         case down, up, unknown
@@ -19,7 +21,7 @@ struct AvailabilityView: View {
     }
 
     var body: some View {
-        let monitored = app.tree.entries.filter(\.kind.isMonitored)
+        let monitored = app.tree.entries.filter { $0.kind.isMonitored && inFolder($0) }
         let down = monitored.filter { app.status[$0.id].map { !$0.reachable } ?? false }
         let up = monitored.filter { app.status[$0.id]?.reachable ?? false }
         let unknown = monitored.filter { app.status[$0.id] == nil }
@@ -38,6 +40,18 @@ struct AvailabilityView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("availabilityFilter")
+                FolderPicker(app: app, title: "Dossier", selection: $folderFilter)
+                Button {
+                    Task { await app.retest(monitored) { done, total in retest = (done, total) }; retest = nil }
+                } label: {
+                    HStack {
+                        Label(folderFilter == nil ? "Retester tout" : "Retester ce dossier", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if let retest { Text("\(retest.done)/\(retest.total)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                    }
+                }
+                .disabled(retest != nil || monitored.isEmpty)
+                .accessibilityIdentifier("availabilityRetest")
             } footer: {
                 Text("Relay teste le port de chaque entrée SSH, RDP et VNC toutes les minutes, depuis le serveur.")
             }
@@ -71,6 +85,12 @@ struct AvailabilityView: View {
 
     private static func sorted(_ entries: [Entry]) -> [Entry] {
         entries.sorted { (a: Entry, b: Entry) -> Bool in a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending }
+    }
+
+    /// Vrai si l'entrée est dans le dossier filtré (sous-dossiers compris).
+    private func inFolder(_ entry: Entry) -> Bool {
+        guard let folderFilter else { return true }
+        return app.tree.path(of: entry.folderId).contains { $0.id == folderFilter }
     }
 
     private func counter(_ n: Int, _ label: String, _ color: Color) -> some View {

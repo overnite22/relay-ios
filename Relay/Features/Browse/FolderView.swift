@@ -6,6 +6,8 @@ struct FolderView: View {
     let app: AppSession
     let folderId: String?
     @State private var query = ""
+    @State private var newEntry: EditingBox<EntryInput>?
+    @State private var folderEditor: EditingBox<Folder?>?
 
     var body: some View {
         List {
@@ -47,6 +49,40 @@ struct FolderView: View {
             }
         }
         .navigationTitle(app.tree.folder(folderId)?.name ?? "Connexions")
+        .sheet(item: $newEntry) { box in EntryEditorView(app: app, input: box.value) }
+        .sheet(item: $folderEditor) { box in FolderEditorView(app: app, folder: box.value, parentId: folderId) }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Nouvelle entrée", systemImage: "plus.rectangle") { newEntry = EditingBox(value: EntryInput(folderId: folderId)) }
+                        .accessibilityIdentifier("addEntry")
+                    Button("Nouveau dossier", systemImage: "folder.badge.plus") { folderEditor = EditingBox(value: nil) }
+                        .accessibilityIdentifier("addFolder")
+                } label: {
+                    Label("Ajouter", systemImage: "plus")
+                }
+                .accessibilityIdentifier("addMenu")
+            }
+            if folderId != nil {
+                ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Modifier le dossier", systemImage: "pencil") { folderEditor = EditingBox(value: app.tree.folder(folderId)) }
+                        .accessibilityIdentifier("editFolder")
+                    Button("Commande SSH sur ce dossier", systemImage: "terminal") {
+                        app.commandTargets = Set(sshEntries(under: folderId).map(\.id))
+                        app.requestedTab = "commands"
+                    }
+                    .disabled(sshEntries(under: folderId).isEmpty)
+                    Button("Ouvrir toutes les sessions", systemImage: "rectangle.stack") {
+                        app.openAll(app.tree.entries(in: folderId))
+                    }
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
+                }
+                .accessibilityIdentifier("folderActions")
+                }
+            }
+        }
         .searchable(text: $query, placement: folderId == nil ? .navigationBarDrawer(displayMode: .always) : .automatic,
                     prompt: "Nom, hôte, utilisateur, notes")
         .refreshable { await app.refresh() }
@@ -92,6 +128,12 @@ struct FolderView: View {
         let names = app.tree.path(of: entry.folderId).map(\.name)
         let base = names.isEmpty ? "Racine" : names.joined(separator: " › ")
         return entry.target.isEmpty ? base : "\(base) · \(entry.target)"
+    }
+
+    private func sshEntries(under folder: String?) -> [Entry] {
+        var out = app.tree.entries(in: folder).filter { $0.kind == .ssh }
+        for child in app.tree.folders(in: folder) { out += sshEntries(under: child.id) }
+        return out
     }
 
     private func count(in folder: String) -> Int {

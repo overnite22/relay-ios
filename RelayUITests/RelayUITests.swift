@@ -152,7 +152,7 @@ final class RelayUITests: XCTestCase {
         switcher.tap()
         XCTAssertTrue(app.buttons["vm-101 (console)"].waitForExistence(timeout: 5) || app.buttons["pve-01 (démo)"].waitForExistence(timeout: 2))
         shot(app, "14-sessions")
-        app.buttons["sessionMinimize"].firstMatch.tap()
+        app.buttons["Réduire toutes les sessions"].tap()
         XCTAssertTrue(app.buttons["sessionsPill"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["sessionsPill"].label.contains("2 sessions"))
     }
@@ -170,5 +170,91 @@ final class RelayUITests: XCTestCase {
         app.buttons["sessionMinimize"].firstMatch.tap()
         XCTAssertTrue(app.buttons["sessionsPill"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["sessionsPill"].label.contains("2 sessions"))
+    }
+
+    func testSessionFiles() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        app.buttons["entry-pve-01"].firstMatch.tap()
+        app.buttons["entryOpen"].tap()
+        let files = app.buttons["sessionFiles"]
+        XCTAssertTrue(files.waitForExistence(timeout: 10))
+        files.tap()
+        XCTAssertTrue(app.buttons["file-rapport.txt"].waitForExistence(timeout: 5))
+        app.buttons["file-Documents"].tap()
+        XCTAssertTrue(app.buttons["file-notes.md"].waitForExistence(timeout: 5))
+        shot(app, "16-fichiers")
+        app.buttons["file-notes.md"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["transfer-notes.md"].waitForExistence(timeout: 5))
+        sleep(2)
+        shot(app, "17-fichier-telecharge")
+    }
+
+    func testCommandBroadcast() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Commandes"].tap()
+        app.buttons["commandTargets"].tap()
+        XCTAssertTrue(app.buttons["targetFolder-Laboratoire"].waitForExistence(timeout: 5))
+        app.buttons["targetFolder-Laboratoire"].tap()
+        shot(app, "18-commande-cibles")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let editor = app.textViews["commandText"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        editor.typeText("uptime")
+        app.buttons["commandRun"].tap()
+        XCTAssertTrue(app.buttons["result-pve-01"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'réussie'")).firstMatch.waitForExistence(timeout: 10))
+        shot(app, "19-commande-resultats")
+        app.buttons["result-pve-01"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'load average'")).firstMatch.waitForExistence(timeout: 5))
+        shot(app, "20-commande-sortie")
+    }
+
+    func testEditingAndAdministration() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        // Nouvelle entrée depuis la racine.
+        app.buttons["addMenu"].tap()
+        app.buttons["addEntry"].tap()
+        let name = app.textFields["editorName"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("nouveau")
+        app.textFields["editorHost"].tap()
+        app.textFields["editorHost"].typeText("192.0.2.50")
+        shot(app, "21-nouvelle-entree")
+        app.buttons["editorSave"].tap()
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 5))
+        // Modifier une entrée existante : fiche relue, pièces jointes visibles.
+        app.buttons["entry-pve-01"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["schema-reseau.pdf"].waitForExistence(timeout: 5))
+        app.buttons["entryEdit"].tap()
+        XCTAssertTrue(app.buttons["editorDelete"].waitForExistence(timeout: 5))
+        shot(app, "22-modifier-entree")
+        app.buttons["Annuler"].tap()
+        // Coffre : nouvel identifiant.
+        app.tabBars.buttons["Coffre"].tap()
+        app.buttons["credNew"].tap()
+        XCTAssertTrue(app.textFields["credName"].waitForExistence(timeout: 5))
+        shot(app, "23-nouvel-identifiant")
+        app.buttons["Annuler"].tap()
+        // Administration.
+        app.tabBars.buttons["Plus"].tap()
+        app.buttons["moreSources"].tap()
+        XCTAssertTrue(app.buttons["source-Cluster labo"].waitForExistence(timeout: 5))
+        app.buttons["source-Cluster labo"].tap()
+        app.buttons["sourceSync"].tap()
+        XCTAssertTrue(app.staticTexts["Connexion réussie : Proxmox VE 9.2"].waitForExistence(timeout: 5))
+        shot(app, "24-source")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["moreDuplicates"].tap()
+        XCTAssertTrue(app.staticTexts["ancien-pve-02"].waitForExistence(timeout: 5))
+        shot(app, "25-doublons")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["moreBackup"].tap()
+        shot(app, "26-sauvegarde")
     }
 }

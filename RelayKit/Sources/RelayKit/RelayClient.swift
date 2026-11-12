@@ -218,13 +218,52 @@ public actor RelayClient {
         return components.url
     }
 
+    // MARK: - Assistants génériques (extensions de l'API)
+
+    func getJSON<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        try await get(path, query: query)
+    }
+
+    func postJSON<T: Decodable, B: Encodable>(_ path: String, _ body: B) async throws -> T {
+        try await post(path, body)
+    }
+
+    func putJSON<T: Decodable, B: Encodable>(_ path: String, _ body: B) async throws -> T {
+        try decode(await send(request("PUT", path, body: JSONEncoder().encode(body))))
+    }
+
+    func sendEmpty(_ method: String, _ path: String, body: Data? = nil) async throws {
+        _ = try await send(request(method, path, body: body))
+    }
+
+    /// Envoie un corps brut (fichier) et décode la réponse JSON.
+    func sendRaw<T: Decodable>(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data, contentType: String,
+                               extraHeaders: [String: String] = [:]) async throws -> T {
+        var req = try request(method, path, query: query)
+        req.httpBody = body
+        req.timeoutInterval = 300
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        for (k, v) in extraHeaders { req.setValue(v, forHTTPHeaderField: k) }
+        return try decode(await send(req))
+    }
+
+    /// Télécharge un contenu brut.
+    func getRaw(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+        var req = try request(method, path, body: body)
+        req.timeoutInterval = 300
+        req.setValue("*/*", forHTTPHeaderField: "Accept")
+        return try await send(req)
+    }
+
+    nonisolated func pathEscape(_ id: String) -> String { escape(id) }
+
     nonisolated private func escape(_ id: String) -> String {
         id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
     }
 }
 
 /// Valeur JSON générique (relecture d'une fiche sans en modéliser tous les champs).
-public enum JSONValue: Codable, Equatable, Sendable {
+public enum JSONValue: Codable, Hashable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)

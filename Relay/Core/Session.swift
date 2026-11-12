@@ -20,6 +20,12 @@ import SwiftUI
     private(set) var sessions: [SessionController] = []
     /// Session affichée en plein écran (nil = sessions réduites).
     var presentedSessionID: String?
+    /// Serveurs cochés pour la diffusion de commandes.
+    var commandTargets: Set<String> = []
+    /// Commande à reprendre dans l'éditeur (historique, menu d'un dossier).
+    var commandDraft: (command: String, sudo: Bool)?
+    /// Onglet demandé par une action (ex. « Commande sur ce dossier »).
+    var requestedTab: String?
     @ObservationIgnored private var unlockedUntil = Date.distantPast
 
     private let store: AccountStore
@@ -140,6 +146,44 @@ import SwiftUI
     var secretsUnlocked: Bool { Date() < unlockedUntil }
     func markUnlocked() { unlockedUntil = Date().addingTimeInterval(60) }
     func lockSecrets() { unlockedUntil = .distantPast }
+
+    /// Copie d'une entrée (réglages compris), nommée « … (copie) ».
+    func duplicate(_ entry: Entry) async {
+        guard let client else { return }
+        do {
+            var input = try await client.entryInput(entry.id)
+            input.name += " (copie)"
+            input.favorite = false
+            _ = try await client.saveEntry(input)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Reteste le port des entrées (une fois par adresse), 6 à la fois ; progress(fait, total).
+    func retest(_ entries: [Entry], progress: @escaping @MainActor (Int, Int) -> Void) async {
+        guard let client else { return }
+        var seen = Set<String>()
+        let targets = entries.filter { $0.kind.isMonitored && seen.insert($0.target).inserted }
+        var done = 0
+        progress(0, targets.count)
+        await withTaskGroup(of: Void.self) { group in
+            var iterator = targets.makeIterator()
+            func next() -> Bool {
+                guard let entry = iterator.next() else { return false }
+                group.addTask { _ = try? await client.testConnection(entry.id) }
+                return true
+            }
+            for _ in 0..<6 where next() {}
+            while await group.next() != nil {
+                done += 1
+                progress(done, targets.count)
+                _ = next()
+            }
+        }
+        await refreshStatus()
+    }
 
     func refreshStatus() async {
         guard let client else { return }
