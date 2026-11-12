@@ -1,0 +1,175 @@
+name: CI
+
+# Dépôt public : minutes macOS gratuites, tout tourne à chaque push.
+# Publication d'une release : Actions → CI → Run workflow, « release » coché.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ui_tests:
+        description: Tests UI
+        type: boolean
+        default: true
+      release:
+        description: Publier l'IPA en release GitHub (si les tests passent)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Contrôle des sources
+        run: node scripts/check-source.mjs
+      - name: Tests RelayKit (Linux)
+        run: |
+          swift --version
+          swift test --package-path RelayKit
+
+  ios:
+    needs: source-check
+    runs-on: macos-latest
+    timeout-minutes: 60
+    outputs:
+      ipa: ${{ steps.ipa.outcome }}
+      unit: ${{ steps.unit.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode le plus récent
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Simulateur iPhone
+        run: |
+          UDID=$(xcrun simctl list devices available -j | jq -r '
+            [.devices | to_entries[] | select(.key | test("iOS-[0-9]"))
+             | select([.value[] | select(.name | startswith("iPhone"))] | length > 0)]
+            | sort_by(.key | capture("iOS-(?<a>[0-9]+)-(?<b>[0-9]+)") | [(.a|tonumber), (.b|tonumber)])
+            | last | [.value[] | select(.name | startswith("iPhone"))] | last | .udid')
+          test -n "$UDID" && test "$UDID" != null
+          xcrun simctl list devices available | grep "$UDID"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Tests unitaires
+        id: unit
+        run: |
+          set -o pipefail
+          xcodebuild -project Relay.xcodeproj -scheme Relay \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -parallel-testing-enabled NO -only-testing:RelayTests \
+            -resultBundlePath build/UnitTests.xcresult \
+            test 2>&1 | tee build-unit.log | grep -E "error:|warning: .*Relay/|Test Case .*failed|Executed|\*\* (TEST|BUILD)"
+
+      - name: Tests UI
+        id: ui
+        if: (github.event_name != 'workflow_dispatch' || inputs.ui_tests) && !cancelled() && steps.unit.outcome == 'success'
+        run: |
+          set -o pipefail
+          xcodebuild -project Relay.xcodeproj -scheme Relay \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -parallel-testing-enabled NO -only-testing:RelayUITests \
+            -resultBundlePath build/UITests.xcresult \
+            test 2>&1 | tee build-ui.log | grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* (TEST|BUILD)"
+
+      - name: Captures d'écran
+        if: always() && hashFiles('build/UITests.xcresult/**') != ''
+        run: |
+          mkdir -p build/screens
+          xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screens || exit 0
+          if [ -f build/screens/manifest.json ]; then
+            jq -r '.[].attachments[] | [.exportedFileName, .suggestedHumanReadableName] | @tsv' build/screens/manifest.json |
+            while IFS=$'\t' read -r file name; do
+              clean=$(printf '%s' "$name" | sed -E 's/_[0-9A-F-]{36}//; s/[^A-Za-z0-9._-]+/-/g')
+              [ -f "build/screens/$file" ] && mv "build/screens/$file" "build/screens/$clean" || true
+            done
+          fi
+          ls build/screens
+
+      - name: IPA non signée
+        id: ipa
+        if: always() && steps.unit.outcome == 'success'
+        run: |
+          set -o pipefail
+          xcodebuild -project Relay.xcodeproj -scheme Relay \
+            -configuration Release -sdk iphoneos -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build-ipa.log | grep -E "error:|\*\* BUILD"
+          mkdir -p build/Payload
+          cp -R build/dd/Build/Products/Release-iphoneos/Relay.app build/Payload/
+          (cd build && zip -qry Relay-unsigned.ipa Payload)
+
+      - name: Journaux et résultats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: |
+            build-*.log
+            build/*.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: build/screens/*.png
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: IPA
+        if: always() && steps.ipa.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Relay-unsigned-ipa
+          path: build/Relay-unsigned.ipa
+          retention-days: 14
+
+  release:
+    # Seul job avec droit d'écriture : publie l'IPA déjà construite, n'exécute pas de code du projet.
+    if: github.event_name == 'workflow_dispatch' && inputs.release && needs.ios.outputs.unit == 'success' && needs.ios.outputs.ipa == 'success'
+    needs: ios
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: Relay.xcodeproj
+      - uses: actions/download-artifact@v4
+        with:
+          name: Relay-unsigned-ipa
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep -o "MARKETING_VERSION = [0-9.]*" Relay.xcodeproj/project.pbxproj | head -1 | cut -d" " -f3)
+          BUILD=$(grep -o "CURRENT_PROJECT_VERSION = [0-9]*" Relay.xcodeproj/project.pbxproj | head -1 | cut -d" " -f3)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$BUILD" =~ ^[0-9]+$ ]]
+          TAG="v$VERSION-$BUILD"
+          mv Relay-unsigned.ipa "Relay-$VERSION-$BUILD.ipa"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "Relay-$VERSION-$BUILD.ipa" --clobber
+          else
+            gh release create "$TAG" "Relay-$VERSION-$BUILD.ipa" --target "$GITHUB_SHA" \
+              --title "Relay $VERSION ($BUILD)" \
+              --notes "IPA non signée, à installer avec iloader, Sideloadly ou SideStore (Apple ID gratuit). Voir docs/INSTALLATION.md."
+          fi

@@ -1,0 +1,24 @@
+# Xcode / SwiftPM
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+.build/
+.swiftpm/
+*.xcresult
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+Package.resolved
+
+# macOS / éditeurs
+.DS_Store
+.vscode/
+.idea/
+
+# Node
+node_modules/
+
+# Liste locale anti-fuite (jamais commitée)
+.private-words
