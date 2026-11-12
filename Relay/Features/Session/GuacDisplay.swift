@@ -30,9 +30,9 @@ final class GuacLayer {
         let h = max(height, 1)
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         let info = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: info)
+        let made = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: info)
             ?? CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: info)
-        guard let ctx else { preconditionFailure("CGContext indisponible") }
+        guard let ctx = made else { preconditionFailure("CGContext indisponible") }
         ctx.interpolationQuality = .none
         ctx.translateBy(x: 0, y: CGFloat(h))
         ctx.scaleBy(x: 1, y: -1)
@@ -43,7 +43,7 @@ final class GuacLayer {
     /// Redimensionne en conservant le contenu (ancré en haut à gauche).
     func resize(width: Int, height: Int) {
         guard width != self.width || height != self.height else { return }
-        let old = (width: self.width, height: self.height) == (0, 0) ? nil : context.makeImage()
+        let old = (self.width == 0 && self.height == 0) ? nil : context.makeImage()
         let oldSize = CGSize(width: self.width, height: self.height)
         context = GuacLayer.makeContext(width: width, height: height)
         self.width = width
@@ -122,7 +122,7 @@ final class GuacDisplay {
         switch ChannelMask(mask: mask) {
         case .rin: return .destinationIn
         case .rout: return .destinationOut
-        case .in: return .sourceIn
+        case .`in`: return .sourceIn
         case .atop: return .sourceAtop
         case .out: return .sourceOut
         case .ratop: return .destinationAtop

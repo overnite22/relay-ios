@@ -171,19 +171,6 @@ public actor RelayClient {
 
     /// Met à jour le favori d'une entrée (PUT complet, comme le fait Relay web).
     public func setFavorite(_ entry: Entry, _ favorite: Bool) async throws -> Entry {
-        struct Input: Encodable {
-            let folderId: String?
-            let name: String
-            let kind: String
-            let host: String
-            let port: Int
-            let url: String
-            let username: String
-            let credentialId: String?
-            let settings: [String: String]
-            let notes: String
-            let favorite: Bool
-        }
         // Les réglages avancés ne sont pas modélisés côté mobile : on relit la fiche complète pour les conserver.
         let raw: [String: JSONValue] = try await get("/api/entries/\(escape(entry.id))")
         var object = raw

@@ -23,13 +23,7 @@ struct AvailabilityView: View {
         let down = monitored.filter { app.status[$0.id].map { !$0.reachable } ?? false }
         let up = monitored.filter { app.status[$0.id]?.reachable ?? false }
         let unknown = monitored.filter { app.status[$0.id] == nil }
-        let shown: [Entry] = {
-            switch filter {
-            case .down: return down
-            case .up: return up
-            case .unknown: return unknown
-            }
-        }().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let shown = Self.sorted(filter == .down ? down : (filter == .up ? up : unknown))
 
         List {
             Section {
@@ -73,6 +67,10 @@ struct AvailabilityView: View {
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+    }
+
+    private static func sorted(_ entries: [Entry]) -> [Entry] {
+        entries.sorted { (a: Entry, b: Entry) -> Bool in a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending }
     }
 
     private func counter(_ n: Int, _ label: String, _ color: Color) -> some View {
