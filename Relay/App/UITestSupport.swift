@@ -38,7 +38,9 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
         case ("GET", let p) where p.hasSuffix("/totp"): body = #"{"code":"492039","remaining":21,"period":30}"#
         case ("POST", let p) where p.hasSuffix("/test-connection"):
             body = #"{"address":"192.0.2.10:22","ip":"192.0.2.10","status":"reachable","durationMs":4,"checkedAt":"2026-11-12T08:00:00Z"}"#
-        case ("POST", let p) where p.hasSuffix("/connect"), ("POST", "/api/quick-connect"):
+        case ("POST", "/api/quick-connect"):
+            body = #"{"token":"fixture","protocol":"ssh"}"#
+        case ("POST", let p) where p.hasSuffix("/connect"):
             body = #"{"token":"fixture","protocol":"ssh"}"#
         default:
             status = 404
