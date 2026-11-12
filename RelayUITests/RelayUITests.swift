@@ -96,7 +96,7 @@ final class RelayUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
         app.buttons["entry-pve-01"].firstMatch.tap()
         app.buttons["entryOpen"].tap()
-        XCTAssertTrue(app.otherElements["remoteScreen"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["remoteScreen"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["pve-01 (démo)"].waitForExistence(timeout: 10))
         shot(app, "09-session")
         app.buttons["sessionKeyboard"].tap()
