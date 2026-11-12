@@ -24,7 +24,7 @@ import SwiftUI
                 case .paired: HomeView(app: app)
                 }
                 // Masque le contenu dans le sélecteur d'apps (secrets, inventaire).
-                if scenePhase != .active && app.activeSession == nil {
+                if scenePhase != .active && app.presentedSessionID == nil {
                     Rectangle().fill(.regularMaterial).ignoresSafeArea()
                         .overlay { Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(.secondary) }
                 }

@@ -17,7 +17,8 @@ struct AuditView: View {
         "credential.reveal": "Secret affiché / copié", "credential.totp": "Code TOTP affiché",
         "source.create": "Source ajoutée", "source.update": "Source modifiée", "source.delete": "Source supprimée",
         "source.sync": "Synchronisation", "import.rdm": "Import RDM",
-        "device.create": "Appareil appairé", "device.delete": "Appareil révoqué", "recording.delete": "Enregistrement supprimé",
+        "device.create": "Appareil appairé", "device.delete": "Appareil révoqué", "recording.delete": "Enregistrement supprimé", "workspace.save": "Espace de travail enregistré",
+        "folder.credentials": "Identifiants du dossier", "backup.export": "Sauvegarde exportée", "backup.restore": "Sauvegarde restaurée",
     ]
 
     var body: some View {

@@ -19,7 +19,7 @@ struct EntryRow: View {
                 Text(path ?? subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
-            if entry.kind.opensNatively { StatusDot(test: status) }
+            if entry.kind.isMonitored { StatusDot(test: status) }
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("entry-\(entry.name)")

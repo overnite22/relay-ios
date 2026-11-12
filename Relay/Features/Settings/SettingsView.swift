@@ -31,6 +31,12 @@ struct MoreView: View {
                     Label("Enregistrements", systemImage: "film")
                 }
                 .accessibilityIdentifier("moreRecordings")
+                NavigationLink {
+                    WorkspacesView(app: app)
+                } label: {
+                    Label("Espaces de travail", systemImage: "square.stack.3d.up")
+                }
+                .accessibilityIdentifier("moreWorkspaces")
             }
             Section {
                 Picker("Texte SSH", selection: $sshText) {

@@ -169,6 +169,18 @@ public actor RelayClient {
         try await get("/api/audit", query: [URLQueryItem(name: "limit", value: String(limit))])
     }
 
+    public func workspaces() async throws -> [Workspace] { try await get("/api/workspaces") }
+
+    public func saveWorkspace(_ w: Workspace) async throws -> Workspace {
+        let body = try JSONEncoder().encode(w)
+        let path = w.id.isEmpty ? "/api/workspaces" : "/api/workspaces/\(escape(w.id))"
+        return try decode(await send(request(w.id.isEmpty ? "POST" : "PUT", path, body: body)))
+    }
+
+    public func deleteWorkspace(_ id: String) async throws {
+        _ = try await send(request("DELETE", "/api/workspaces/\(escape(id))"))
+    }
+
     public func recordings() async throws -> [Recording] {
         let list: [Recording] = try await get("/api/recordings")
         return list.sorted { $0.at > $1.at }

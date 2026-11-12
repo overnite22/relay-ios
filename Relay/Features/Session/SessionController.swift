@@ -74,6 +74,7 @@ enum SessionPreferences {
     }
 
     let target: SessionTarget
+    let uid = UUID().uuidString
     private(set) var phase: Phase = .preparing
     private(set) var remoteName: String?
     private(set) var keyboardVisible = false
@@ -123,7 +124,9 @@ enum SessionPreferences {
             let ticket: SessionTicket
             switch target {
             case .entry(let entry, _):
-                ticket = try await client.connect(entry.id, options: options)
+                var opts = options
+                opts.native = entry.kind == .pve
+                ticket = try await client.connect(entry.id, options: opts)
                 app.noteOpened(entry.id)
             case .quick(var request, _):
                 request.width = options.width
@@ -189,7 +192,7 @@ enum SessionPreferences {
         guard size != lastSize, size.width > 10, size.height > 10 else { return }
         lastSize = size
         lastScale = scale
-        guard phase == .connected, target.kind != .vnc else { return }
+        guard phase == .connected, target.kind != .vnc, target.kind != .pve else { return }
         resizeTask?.cancel()
         resizeTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))

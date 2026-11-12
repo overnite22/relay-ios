@@ -39,13 +39,41 @@ struct HomeView: View {
             .tag(Tab.more)
         }
         .task { await app.refresh() }
-        .fullScreenCover(item: $app.activeSession) { target in
-            SessionView(target: target, app: app)
+        .overlay(alignment: .bottom) {
+            if !app.sessions.isEmpty && app.presentedSessionID == nil { sessionsPill }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { app.presentedSessionID != nil },
+            set: { if !$0 { app.presentedSessionID = nil } }
+        )) {
+            SessionsHost(app: app)
         }
     }
 
+    /// Retour aux sessions réduites.
+    private var sessionsPill: some View {
+        Button {
+            app.presentedSessionID = app.sessions.last?.uid
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.stack.fill")
+                Text(app.sessions.count == 1 ? (app.sessions.first?.title ?? "") : "\(app.sessions.count) sessions ouvertes")
+                    .lineLimit(1)
+                Image(systemName: "chevron.up").font(.caption.weight(.bold))
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Color.relayAccent.opacity(0.4)))
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 92)
+        .accessibilityIdentifier("sessionsPill")
+    }
+
     private var downCount: Int {
-        app.tree.entries.filter { $0.kind.opensNatively && app.status[$0.id].map { !$0.reachable } == true }.count
+        app.tree.entries.filter { $0.kind.isMonitored && app.status[$0.id].map { !$0.reachable } == true }.count
     }
 }
 

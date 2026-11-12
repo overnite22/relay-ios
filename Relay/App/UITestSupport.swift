@@ -34,6 +34,13 @@ final class FixtureHTTP: HTTPTransport, @unchecked Sendable {
         case ("GET", "/api/connection-status"): body = Self.status
         case ("GET", "/api/credentials"): body = Self.credentials
         case ("GET", "/api/audit"): body = Self.audit
+        case ("GET", "/api/workspaces"): body = #"[{"id":"w-matin","name":"Tour du matin","entryIds":["e-pve1","e-win"]}]"#
+        case ("POST", "/api/workspaces"), ("PUT", "/api/workspaces/w-matin"):
+            body = String(data: request.httpBody ?? Data(), encoding: .utf8)?
+                .replacingOccurrences(of: #""id":"""#, with: #""id":"w-new""#) ?? "{}"
+        case ("DELETE", "/api/workspaces/w-matin"):
+            let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (Data(), response)
         case ("GET", "/api/recordings"): body = Self.recordings
         case ("GET", "/api/recordings/r-demo"): body = GuacFixture.recording
         case ("DELETE", let p) where p.hasPrefix("/api/recordings/"):

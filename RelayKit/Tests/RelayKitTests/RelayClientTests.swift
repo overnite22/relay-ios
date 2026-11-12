@@ -49,6 +49,7 @@ final class RelayClientTests: XCTestCase {
         let client = RelayClient(account: account, transport: stub)
         let tree = try await client.tree()
         XCTAssertEqual(tree.entries.count, 2)
+        XCTAssertEqual(tree.folders[0].credentials, [:])
         XCTAssertEqual(tree.entries[1].kind, .other)
         XCTAssertEqual(tree.entries[0].target, "pve1.lab.example:22")
         XCTAssertEqual(tree.path(of: "f2").map(\.name), ["Lab", "Proxmox"])
@@ -79,7 +80,7 @@ final class RelayClientTests: XCTestCase {
         XCTAssertEqual(ticket, SessionTicket(token: "abc", protocol: "rdp"))
         let body = try XCTUnwrap(stub.requests[0].httpBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(Set(json.keys), ["width", "height", "dpi", "timezone", "record"])
+        XCTAssertEqual(Set(json.keys), ["width", "height", "dpi", "timezone", "record", "native"])
         XCTAssertEqual(json["dpi"] as? Int, 192)
         XCTAssertEqual(client.tunnelURL(token: "a b")?.absoluteString, "wss://relay.example.com/api/tunnel?token=a%20b")
     }
@@ -101,5 +102,25 @@ final class RelayClientTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(req)) as? [String: Any])
         XCTAssertEqual(Set(json.keys), ["kind", "host", "port", "username", "domain", "password", "width", "height", "dpi", "timezone", "record"])
         XCTAssertEqual(json["kind"] as? String, "ssh")
+    }
+}
+
+final class WorkspaceTests: XCTestCase {
+    func testFolderCredentialsAndWorkspaces() async throws {
+        let folder = try JSONDecoder().decode(Folder.self, from: Data(#"{"id":"f","parentId":null,"name":"Lab","credentials":{"ssh":"c1","rdp":null}}"#.utf8))
+        XCTAssertEqual(folder.credentials["ssh"], .some("c1"))
+        XCTAssertEqual(folder.credentials["rdp"], .some(nil))
+        let stub = StubTransport()
+        stub.responses["GET /api/workspaces"] = .init(status: 200, body: #"[{"id":"w1","name":"Matin","entryIds":["e1","e2"]}]"#)
+        stub.responses["POST /api/workspaces"] = .init(status: 200, body: #"{"id":"w2","name":"Soir","entryIds":["e3"]}"#)
+        stub.responses["DELETE /api/workspaces/w1"] = .init(status: 204, body: "")
+        let client = RelayClient(account: ServerAccount(server: URL(string: "https://relay.example.com")!, token: "rlt_x"), transport: stub)
+        let list = try await client.workspaces()
+        XCTAssertEqual(list.first?.entryIds, ["e1", "e2"])
+        let saved = try await client.saveWorkspace(Workspace(name: "Soir", entryIds: ["e3"]))
+        XCTAssertEqual(saved.id, "w2")
+        try await client.deleteWorkspace("w1")
+        XCTAssertEqual(EntryKind.pve.opensNatively, true)
+        XCTAssertEqual(EntryKind.pve.isMonitored, false)
     }
 }

@@ -16,8 +16,10 @@ import SwiftUI
     private(set) var errorMessage: String?
     private(set) var recentIds: [String] = []
     private(set) var credentials: [Credential] = []
-    /// Session ouverte en plein écran (une à la fois).
-    var activeSession: SessionTarget?
+    /// Sessions ouvertes (elles restent connectées quand on les réduit).
+    private(set) var sessions: [SessionController] = []
+    /// Session affichée en plein écran (nil = sessions réduites).
+    var presentedSessionID: String?
     @ObservationIgnored private var unlockedUntil = Date.distantPast
 
     private let store: AccountStore
@@ -58,7 +60,9 @@ import SwiftUI
         tree = .empty
         status = [:]
         credentials = []
-        activeSession = nil
+        for session in sessions { session.close() }
+        sessions = []
+        presentedSessionID = nil
         unlockedUntil = .distantPast
         errorMessage = nil
         phase = .unpaired
@@ -101,7 +105,36 @@ import SwiftUI
 
     func credential(_ id: String?) -> Credential? { id.flatMap { cid in credentials.first { $0.id == cid } } }
 
-    func open(_ target: SessionTarget) { activeSession = target }
+    var presentedSession: SessionController? { sessions.first { $0.uid == presentedSessionID } }
+
+    /// Ouvre une session, ou ramène au premier plan celle déjà ouverte vers la même cible.
+    func open(_ target: SessionTarget) {
+        if let existing = sessions.first(where: { $0.target.id == target.id && !$0.isEnded }) {
+            presentedSessionID = existing.uid
+            return
+        }
+        let controller = SessionController(target: target, app: self)
+        sessions.append(controller)
+        presentedSessionID = controller.uid
+    }
+
+    /// Ouvre plusieurs entrées (espace de travail) et affiche la première.
+    func openAll(_ entries: [Entry]) {
+        let targets = entries.filter(\.kind.opensNatively).map { SessionTarget.entry($0, record: false) }
+        guard let first = targets.first else { return }
+        for target in targets.dropFirst() where !sessions.contains(where: { $0.target.id == target.id && !$0.isEnded }) {
+            sessions.append(SessionController(target: target, app: self))
+        }
+        open(first)
+    }
+
+    func closeSession(_ controller: SessionController) {
+        controller.close()
+        sessions.removeAll { $0 === controller }
+        if presentedSessionID == controller.uid { presentedSessionID = sessions.last?.uid }
+    }
+
+    func minimizeSessions() { presentedSessionID = nil }
 
     /// Vrai si les secrets peuvent être affichés sans nouvelle authentification (fenêtre de 60 s).
     var secretsUnlocked: Bool { Date() < unlockedUntil }

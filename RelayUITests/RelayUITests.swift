@@ -129,4 +129,46 @@ final class RelayUITests: XCTestCase {
         app.buttons["playerClose"].tap()
         XCTAssertTrue(app.buttons["recording-pve-01"].waitForExistence(timeout: 5))
     }
+
+    func testProxmoxConsoleAndSeveralSessions() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        // Console Proxmox : même rendu que les autres sessions.
+        app.buttons["folder-Laboratoire"].tap()
+        app.buttons["folder-Proxmox"].tap()
+        app.buttons["entry-vm-101 (console)"].tap()
+        XCTAssertTrue(app.buttons["entryOpen"].waitForExistence(timeout: 5))
+        app.buttons["entryOpen"].tap()
+        XCTAssertTrue(app.staticTexts["pve-01 (démo)"].waitForExistence(timeout: 10))
+        shot(app, "13-console-proxmox")
+        // Réduire puis ouvrir une deuxième session : les deux restent ouvertes.
+        app.buttons["sessionMinimize"].tap()
+        XCTAssertTrue(app.buttons["sessionsPill"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["entry-pve-02"].tap()
+        app.buttons["entryOpen"].tap()
+        let switcher = app.buttons["sessionSwitcher"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+        switcher.tap()
+        XCTAssertTrue(app.buttons["vm-101 (console)"].waitForExistence(timeout: 5) || app.buttons["pve-01 (démo)"].waitForExistence(timeout: 2))
+        shot(app, "14-sessions")
+        app.buttons["sessionMinimize"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["sessionsPill"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sessionsPill"].label.contains("2 sessions"))
+    }
+
+    func testWorkspaceOpensAllSessions() {
+        let app = launch(["--ui-testing"])
+        XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Plus"].tap()
+        app.buttons["moreWorkspaces"].tap()
+        let workspace = app.buttons["workspace-Tour du matin"]
+        XCTAssertTrue(workspace.waitForExistence(timeout: 5))
+        shot(app, "15-espaces")
+        workspace.tap()
+        XCTAssertTrue(app.buttons["sessionSwitcher"].waitForExistence(timeout: 10))
+        app.buttons["sessionMinimize"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["sessionsPill"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sessionsPill"].label.contains("2 sessions"))
+    }
 }

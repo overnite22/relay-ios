@@ -33,7 +33,7 @@ struct EntryDetailView: View {
                 primaryAction(entry)
             }
 
-            if entry.kind.opensNatively {
+            if entry.kind.isMonitored {
                 Section("Disponibilité") {
                     let test = lastTest ?? app.status[entry.id]
                     HStack {
@@ -104,11 +104,12 @@ struct EntryDetailView: View {
 
     @ViewBuilder private func primaryAction(_ entry: Entry) -> some View {
         switch entry.kind {
-        case .ssh, .rdp, .vnc:
+        case .ssh, .rdp, .vnc, .pve:
             Button {
                 app.open(.entry(entry, record: false))
             } label: {
-                Label("Ouvrir la session \(entry.kind.title)", systemImage: "play.fill").frame(maxWidth: .infinity)
+                Label(entry.kind == .pve ? "Ouvrir la console" : "Ouvrir la session \(entry.kind.title)", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -124,11 +125,6 @@ struct EntryDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-            }
-        case .pve:
-            StatusBanner(message: "La console Proxmox s'ouvre depuis Relay web.", symbol: "info.circle.fill", tint: .blue)
-            if let server = app.account?.server {
-                Button("Ouvrir Relay web", systemImage: "safari") { openURL(server) }
             }
         case .other:
             StatusBanner(message: "Ce type d'entrée n'est pas encore pris en charge par l'app.", symbol: "info.circle.fill", tint: .blue)

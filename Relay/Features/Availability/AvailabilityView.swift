@@ -19,7 +19,7 @@ struct AvailabilityView: View {
     }
 
     var body: some View {
-        let monitored = app.tree.entries.filter(\.kind.opensNatively)
+        let monitored = app.tree.entries.filter(\.kind.isMonitored)
         let down = monitored.filter { app.status[$0.id].map { !$0.reachable } ?? false }
         let up = monitored.filter { app.status[$0.id]?.reachable ?? false }
         let unknown = monitored.filter { app.status[$0.id] == nil }

@@ -8,16 +8,24 @@ struct RemoteScreen: UIViewRepresentable {
     func updateUIView(_ uiView: RemoteScreenView, context: Context) {}
 }
 
-/// Session plein écran (SSH, RDP, VNC) avec barre d'outils.
-struct SessionView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.displayScale) private var displayScale
-    @State private var controller: SessionController
-    @State private var showHelp = false
-
-    init(target: SessionTarget, app: AppSession) {
-        _controller = State(initialValue: SessionController(target: target, app: app))
+/// Hôte plein écran : affiche la session choisie parmi celles ouvertes.
+struct SessionsHost: View {
+    let app: AppSession
+    var body: some View {
+        if let controller = app.presentedSession {
+            SessionView(controller: controller, app: app).id(controller.uid)
+        } else {
+            Color.black.ignoresSafeArea()
+        }
     }
+}
+
+/// Session plein écran (SSH, RDP, VNC, console Proxmox) avec barre d'outils.
+struct SessionView: View {
+    @Environment(\.displayScale) private var displayScale
+    @Bindable var controller: SessionController
+    let app: AppSession
+    @State private var showHelp = false
 
     var body: some View {
         NavigationStack {
@@ -39,7 +47,6 @@ struct SessionView: View {
         .preferredColorScheme(.dark)
         .persistentSystemOverlays(.hidden)
         .statusBarHidden(true)
-        .onDisappear { controller.close() }
     }
 
     @ViewBuilder private var overlay: some View {
@@ -62,7 +69,7 @@ struct SessionView: View {
                 Text(error == nil ? "Session terminée" : "Session interrompue").font(.headline)
                 if let error { Text(error).font(.callout).multilineTextAlignment(.center).foregroundStyle(.secondary) }
                 HStack {
-                    Button("Fermer") { dismiss() }.buttonStyle(.bordered)
+                    Button("Fermer") { app.closeSession(controller) }.buttonStyle(.bordered)
                     Button("Reconnecter", systemImage: "arrow.clockwise") { controller.reconnect() }
                         .buttonStyle(.borderedProminent).accessibilityIdentifier("sessionReconnect")
                 }
@@ -85,8 +92,27 @@ struct SessionView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button("Fermer", systemImage: "xmark") { dismiss() }.accessibilityIdentifier("sessionClose")
+        ToolbarItemGroup(placement: .topBarLeading) {
+            Button("Fermer la session", systemImage: "xmark") { app.closeSession(controller) }.accessibilityIdentifier("sessionClose")
+            Button("Réduire", systemImage: "chevron.down") { app.minimizeSessions() }.accessibilityIdentifier("sessionMinimize")
+        }
+        if app.sessions.count > 1 {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    ForEach(app.sessions, id: \.uid) { session in
+                        Button {
+                            app.presentedSessionID = session.uid
+                        } label: {
+                            Label(session.title, systemImage: session.uid == controller.uid ? "checkmark" : session.target.kind.symbol)
+                        }
+                    }
+                    Divider()
+                    Button("Réduire toutes les sessions", systemImage: "chevron.down") { app.minimizeSessions() }
+                } label: {
+                    Label("Sessions (\(app.sessions.count))", systemImage: "square.stack")
+                }
+                .accessibilityIdentifier("sessionSwitcher")
+            }
         }
         if controller.target.recording {
             ToolbarItem(placement: .topBarTrailing) {

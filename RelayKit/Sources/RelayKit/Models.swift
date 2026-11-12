@@ -32,19 +32,36 @@ public enum EntryKind: String, Codable, Sendable, CaseIterable {
         }
     }
 
-    /// Vrai si l'app sait ouvrir une session native (via guacd).
-    public var opensNatively: Bool { self == .ssh || self == .rdp || self == .vnc }
+    /// Vrai si l'app sait ouvrir une session native (via guacd ; consoles Proxmox relayées par le serveur).
+    public var opensNatively: Bool { self == .ssh || self == .rdp || self == .vnc || self == .pve }
+
+    /// Vrai si le serveur surveille la disponibilité de ce type (port TCP).
+    public var isMonitored: Bool { self == .ssh || self == .rdp || self == .vnc }
+
+    /// Types qu'on peut créer depuis l'app.
+    public static let creatable: [EntryKind] = [.ssh, .rdp, .vnc, .web]
 }
 
 public struct Folder: Codable, Identifiable, Sendable, Hashable {
     public let id: String
     public let parentId: String?
     public let name: String
+    /// Identifiant par défaut hérité par les entrées du dossier, par type (« ssh », « rdp »…).
+    public let credentials: [String: String?]
 
-    public init(id: String, parentId: String?, name: String) {
+    public init(id: String, parentId: String?, name: String, credentials: [String: String?] = [:]) {
         self.id = id
         self.parentId = parentId
         self.name = name
+        self.credentials = credentials
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
+        name = try c.decode(String.self, forKey: .name)
+        credentials = (try? c.decodeIfPresent([String: String?].self, forKey: .credentials)) ?? [:]
     }
 }
 
@@ -217,13 +234,16 @@ public struct SessionOptions: Codable, Sendable, Equatable {
     public var dpi: Int
     public var timezone: String
     public var record: Bool
+    /// Console Proxmox relayée par guacd (au lieu de noVNC).
+    public var native: Bool
 
-    public init(width: Int, height: Int, dpi: Int = 96, timezone: String = TimeZone.current.identifier, record: Bool = false) {
+    public init(width: Int, height: Int, dpi: Int = 96, timezone: String = TimeZone.current.identifier, record: Bool = false, native: Bool = false) {
         self.width = width
         self.height = height
         self.dpi = dpi
         self.timezone = timezone
         self.record = record
+        self.native = native
     }
 }
 
@@ -277,5 +297,18 @@ public enum RelayDate {
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
         return plain.date(from: text)
+    }
+}
+
+/// Espace de travail : groupe d'entrées ouvertes ensemble (propre à l'utilisateur).
+public struct Workspace: Codable, Identifiable, Sendable, Hashable {
+    public var id: String
+    public var name: String
+    public var entryIds: [String]
+
+    public init(id: String = "", name: String, entryIds: [String]) {
+        self.id = id
+        self.name = name
+        self.entryIds = entryIds
     }
 }
