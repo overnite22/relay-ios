@@ -235,7 +235,9 @@ final class RelayUITests: XCTestCase {
         XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "schema-reseau.pdf")).firstMatch.waitForExistence(timeout: 5))
         shot(app, "21b-pieces-jointes")
         app.buttons["entryEdit"].tap()
-        XCTAssertTrue(app.buttons["editorDelete"].waitForExistence(timeout: 5))
+        let editedName = app.textFields["editorName"]
+        XCTAssertTrue(editedName.waitForExistence(timeout: 5))
+        XCTAssertEqual(editedName.value as? String, "pve-01", "fiche complète relue avant modification")
         shot(app, "22-modifier-entree")
         app.buttons["Annuler"].tap()
         // Coffre : nouvel identifiant.

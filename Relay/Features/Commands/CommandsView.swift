@@ -15,6 +15,7 @@ struct CommandsView: View {
     @State private var naming = false
     @State private var newName = ""
     @State private var poll: Task<Void, Never>?
+    @FocusState private var editing: Bool
 
     private var targets: [Entry] {
         app.tree.entries.filter { app.commandTargets.contains($0.id) && $0.kind == .ssh }
@@ -40,6 +41,7 @@ struct CommandsView: View {
                     .font(.system(.body, design: .monospaced))
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .frame(minHeight: 90)
+                    .focused($editing)
                     .accessibilityIdentifier("commandText")
                 Toggle("Exécuter avec sudo", isOn: $sudo)
                 Stepper("Délai par serveur : \(timeout) s", value: $timeout, in: 5...600, step: 5)
@@ -78,6 +80,7 @@ struct CommandsView: View {
             }
             Section {
                 Button {
+                    editing = false
                     Task { await start(targets.map(\.id)) }
                 } label: {
                     Label(starting ? "Démarrage…" : "Exécuter", systemImage: "play.fill").frame(maxWidth: .infinity)
@@ -92,6 +95,7 @@ struct CommandsView: View {
             if let error { StatusBanner(message: error) }
             if let run { results(run) }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Commande SSH")
         .toolbar {
             NavigationLink {
