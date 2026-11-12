@@ -25,7 +25,7 @@ struct SessionView: View {
                 ZStack {
                     Color.black.ignoresSafeArea()
                     RemoteScreen(view: controller.screen)
-                        .onAppear { controller.start(size: geo.size, scale: displayScale) }
+                        .onAppear { controller.viewResized(geo.size, scale: displayScale) }
                         .onChange(of: geo.size) { _, size in controller.viewResized(size, scale: displayScale) }
                     overlay
                 }

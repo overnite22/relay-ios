@@ -181,6 +181,11 @@ enum SessionPreferences {
 
     /// Rotation ou changement de taille : nouvelle résolution après une courte pause.
     func viewResized(_ size: CGSize, scale: CGFloat) {
+        // La première taille valide démarre la session (onAppear peut survenir avant la mise en page).
+        if phase == .preparing {
+            start(size: size, scale: scale)
+            return
+        }
         guard size != lastSize, size.width > 10, size.height > 10 else { return }
         lastSize = size
         lastScale = scale
