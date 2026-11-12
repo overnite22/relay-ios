@@ -37,7 +37,9 @@ struct RecordingsView: View {
                         }
                         Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(Color.relayAccent)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("recording-\(recording.name)")
                 .swipeActions {
                     Button("Supprimer", systemImage: "trash", role: .destructive) { pendingDelete = recording }
