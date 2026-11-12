@@ -43,6 +43,9 @@ final class RemoteScreenView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         clipsToBounds = true
         isMultipleTouchEnabled = true
         accessibilityIdentifier = "remoteScreen"
+        isAccessibilityElement = true
+        accessibilityLabel = "Écran distant"
+        accessibilityTraits = .allowsDirectInteraction
         screenLayer.magnificationFilter = .linear
         screenLayer.minificationFilter = .trilinear
         screenLayer.contentsGravity = .resize

@@ -56,7 +56,13 @@ struct PairingView: View {
                 }
 
                 Section {
-                    DisclosureGroup("Saisie manuelle", isExpanded: $manual) {
+                    Button {
+                        withAnimation { manual.toggle() }
+                    } label: {
+                        Label("Saisie manuelle", systemImage: manual ? "chevron.down" : "chevron.right")
+                    }
+                    .accessibilityIdentifier("pairManual")
+                    if manual {
                         TextField("https://relay.example.com", text: $server)
                             .textContentType(.URL).keyboardType(.URL)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -70,7 +76,6 @@ struct PairingView: View {
                         .disabled(server.isEmpty || token.isEmpty || working)
                         .accessibilityIdentifier("pairConnect")
                     }
-                    .accessibilityIdentifier("pairManual")
                 }
 
                 if working {

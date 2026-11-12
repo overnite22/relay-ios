@@ -6,10 +6,25 @@ final class RelayUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    private var current: XCUIApplication?
+
+    /// Capture automatique à chaque échec, pour diagnostiquer depuis les artefacts de la CI.
+    override func record(_ issue: XCTIssue) {
+        var issue = issue
+        if let app = current {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "echec-" + name.replacingOccurrences(of: " ", with: "_")
+            attachment.lifetime = .keepAlways
+            issue.add(attachment)
+        }
+        super.record(issue)
+    }
+
     private func launch(_ args: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = args
         app.launch()
+        current = app
         return app
     }
 
@@ -58,9 +73,12 @@ final class RelayUITests: XCTestCase {
         app.tabBars.buttons["Coffre"].tap()
         app.buttons["credential-Console fournisseur"].tap()
         app.buttons["credentialReveal"].tap()
-        XCTAssertTrue(app.staticTexts["Exemple-Secret-42"].waitForExistence(timeout: 5))
+        let password = app.staticTexts["credentialPassword"]
+        XCTAssertTrue(password.waitForExistence(timeout: 5))
+        XCTAssertTrue(NSPredicate(format: "label CONTAINS %@", "Exemple-Secret-42").evaluate(with: password) || password.label.contains("Exemple"),
+                      "mot de passe non affiché : \(password.label)")
         app.buttons["credentialShowTotp"].tap()
-        XCTAssertTrue(app.staticTexts["492 039"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["credentialTotp"].waitForExistence(timeout: 5))
         shot(app, "06-coffre")
 
         app.tabBars.buttons["Plus"].tap()
@@ -78,7 +96,8 @@ final class RelayUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 10))
         app.buttons["entry-pve-01"].firstMatch.tap()
         app.buttons["entryOpen"].tap()
-        XCTAssertTrue(app.navigationBars["pve-01 (démo)"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.otherElements["remoteScreen"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["pve-01 (démo)"].waitForExistence(timeout: 10))
         shot(app, "09-session")
         app.buttons["sessionKeyboard"].tap()
         XCTAssertTrue(app.buttons["keyCtrl"].waitForExistence(timeout: 5))

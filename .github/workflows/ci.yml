@@ -88,8 +88,9 @@ jobs:
             test 2>&1 | tee build-ui.log | grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* (TEST|BUILD)"
 
       - name: Captures d'écran
-        if: always() && hashFiles('build/UITests.xcresult/**') != ''
+        if: always()
         run: |
+          test -d build/UITests.xcresult || exit 0
           mkdir -p build/screens
           xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screens || exit 0
           if [ -f build/screens/manifest.json ]; then
