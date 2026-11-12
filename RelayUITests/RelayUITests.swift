@@ -229,7 +229,11 @@ final class RelayUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Favoris"].waitForExistence(timeout: 5))
         // Modifier une entrée existante : fiche relue, pièces jointes visibles.
         app.buttons["entry-pve-01"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["schema-reseau.pdf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["entryEdit"].waitForExistence(timeout: 5))
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "schema-reseau.pdf")).firstMatch.waitForExistence(timeout: 5))
+        shot(app, "21b-pieces-jointes")
         app.buttons["entryEdit"].tap()
         XCTAssertTrue(app.buttons["editorDelete"].waitForExistence(timeout: 5))
         shot(app, "22-modifier-entree")
